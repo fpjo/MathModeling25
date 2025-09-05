@@ -1,0 +1,63 @@
+# Conda environment configuration for Mathematical Modeling Competition
+# To create the environment: conda env create -f environment.yml
+# To activate the environment: conda activate math_modeling
+
+name: MathModeling
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # --- Python 核心 ---
+  - python=3.10  # 建议使用一个稳定且主流的Python版本，如3.9或3.10
+
+  # --- 数据科学与数值计算核心库 (必备) ---
+  - numpy>=1.21         # Python科学计算的基础，提供多维数组对象和相关工具
+  - pandas>=1.4         # 强大的数据处理和分析库，用于处理表格数据（如CSV, Excel）
+  - scipy>=1.8          # 科学计算库，包含优化、统计、信号处理、线性代数等模块
+  - matplotlib>=3.5     # 最常用的数据可视化库，用于绘制各种静态图表
+  - seaborn>=0.12       # 基于Matplotlib的高级可视化库，提供更美观的统计图形
+
+  # --- 机器学习与建模库 (根据题目类型选择) ---
+  - scikit-learn>=1.1   # 机器学习首选库，包含分类、回归、聚类、降维、模型选择等
+  - xgboost             # 高效的梯度提升框架，在各种比赛中表现优异
+  - lightgbm            # 另一个高性能的梯度提升框架，速度快、内存占用低
+  - statsmodels>=0.13   # 统计建模和计量经济学库，用于统计测试、线性模型、时间序列分析等
+
+  # --- 优化与运筹学库 (规划问题常用) ---
+  - pulp                # 线性规划（LP）、混合整数规划（MIP）建模库
+  - ortools-python             # Google出品的运筹学软件套件，功能强大，支持多种规划问题
+  - pyceres
+  # - gurobipy          # (可选，商业软件) Gurobi的Python接口，最顶级的商业优化求解器，需要自行申请学术许可
+  # - cplex             # (可选，商业软件) IBM CPLEX的Python接口，同样是顶级的商业求解器
+
+  # --- 深度学习库 (如果题目涉及图像、自然语言处理等) ---
+  # - tensorflow        # Google的深度学习框架
+  # - pytorch             # Facebook的深度学习框架
+  # - torchvision         # PyTorch的视觉库
+  # - torchaudio          # PyTorch的音频库
+  # - keras               # TensorFlow的高级API，易于上手
+
+  # --- 数据可视化与交互 (让图表更好看、可交互) ---
+  - plotly>=5.0         # 强大的交互式图表库
+  - pyecharts           # 基于Echarts的Python可视化库，图表美观，适合国内用户
+  - networkx>=2.8       # 用于创建、操作和研究复杂网络的结构、动态和功能
+  - Pillow>=9.0         # Python图像处理库 (PIL Fork)
+
+  # --- Jupyter 环境与工具 (推荐的交互式开发环境) ---
+  - jupyterlab>=3.4     # 下一代的Jupyter Notebook，强烈推荐
+  - notebook            # 经典的Jupyter Notebook
+  - ipywidgets          # 为Jupyter提供交互式HTML小部件
+  - ipykernel           # 在Conda环境中运行Jupyter的核心
+
+  # --- 其他实用工具 ---
+  - openpyxl            # 读写Excel 2010 xlsx/xlsm/xltx/xltm文件的库
+  - xlrd                # 读取旧版Excel文件 (.xls)
+  - scikit-image        # 图像处理算法集合
+  - tqdm                # 为长时间运行的循环添加一个智能进度条
+  - beautifulsoup4      # 用于网页抓取和解析HTML/XML (如果需要爬取数据)
+  - requests            # 简洁强大的HTTP请求库 (如果需要从API获取数据)
+
+  # --- 使用pip安装conda-forge中没有的包 ---
+  - pip

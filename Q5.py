@@ -3,8 +3,7 @@ from scipy.optimize import brentq, differential_evolution
 import warnings
 import time
 import pandas as pd
-from itertools import permutations
-import os
+from itertools import product
 
 # --- 0. 环境设置 ---
 # 忽略计算中可能出现的无效值警告
@@ -236,8 +235,8 @@ def find_best_strategy_for_pair(drone_id, missile_id):
         bounds,
         args=(P_D0, P_M0, v_m_vec),
         strategy='best1bin',
-        maxiter=50,      # 演示值，建议增加到 200+
-        popsize=100,      # 演示值，建议增加到 50+
+        maxiter=5,      # 演示值，建议增加到 200+
+        popsize=10,      # 演示值，建议增加到 50+
         tol=0.01,
         mutation=(0.5, 1),
         recombination=0.7,
@@ -264,6 +263,32 @@ def find_best_strategy_for_pair(drone_id, missile_id):
         'max_time': max_time, 'params': best_params, 'intervals': intervals
     }
 
+def calculate_union_of_intervals(intervals_list):
+    """计算时间段并集的总长度和合并后的时间段"""
+    if not intervals_list:
+        return 0, []
+    
+    # 将所有时间段合并到一个列表中
+    flat_list = [interval for sublist in intervals_list for interval in sublist]
+    if not flat_list:
+        return 0, []
+
+    # 按起始时间排序
+    flat_list.sort(key=lambda x: x[0])
+    
+    merged = []
+    if flat_list:
+        current_start, current_end = flat_list[0]
+        for next_start, next_end in flat_list[1:]:
+            if next_start <= current_end:
+                current_end = max(current_end, next_end)
+            else:
+                merged.append([current_start, current_end])
+                current_start, current_end = next_start, next_end
+        merged.append([current_start, current_end])
+    
+    total_duration = sum(end - start for start, end in merged)
+    return total_duration, merged
 
 # --- 3. 主执行流程 ---
 if __name__ == "__main__":
@@ -276,45 +301,48 @@ if __name__ == "__main__":
     print("说明: 此阶段将为每个'无人机-导弹'组合寻找最优干扰方案。")
     print("该过程计算量巨大，请耐心等待...")
 
-    all_pairs_results = []
-    for d_id in DRONES_INFO.keys():
-        for m_id in MISSILES_INFO.keys():
-            result = find_best_strategy_for_pair(d_id, m_id)
-            all_pairs_results.append(result)
+    all_pairs_results = {}
+    drone_ids = list(DRONES_INFO.keys())
+    missile_ids = list(MISSILES_INFO.keys())
 
-    # --- STAGE 2: 寻找最优的无人机-导弹分配方案 ---
+    for d_id in drone_ids:
+        for m_id in missile_ids:
+            # 键为元组 (drone_id, missile_id)
+            all_pairs_results[(d_id, m_id)] = find_best_strategy_for_pair(d_id, m_id)
+
+
+     # --- STAGE 2: 遍历所有分配方案，寻找最优解 ---
     print("\n" + "="*60)
     print("            问题5：最优烟幕投放策略 - 分配阶段            ")
     print("="*60)
-    print("说明: 正在从预计算结果中寻找最佳的无人机任务分配...")
 
-    drone_ids = list(DRONES_INFO.keys())
-    missile_ids = list(MISSILES_INFO.keys())
-    
     best_assignment = None
     max_total_time = -1
 
-    # 生成所有从5架无人机中选出3架的组合
-    drone_permutations = permutations(drone_ids, len(missile_ids))
+    # 生成所有可能的分配方案：每个无人机有3种选择
+    assignments = product(missile_ids, repeat=len(drone_ids))
 
-    # 遍历所有分配可能性
-    for drone_assign in drone_permutations:
+    for assignment_tuple in assignments:
+        # assignment_tuple: ('M1', 'M1', 'M2', 'M3', 'M1')
+        # 表示 FY1->M1, FY2->M1, FY3->M2, ...
+        
+        current_assignment = {m_id: [] for m_id in missile_ids}
+        for i, m_id in enumerate(assignment_tuple):
+            current_assignment[m_id].append(drone_ids[i])
+        
+        # 确保每个导弹至少被一架无人机干扰
+        if not all(current_assignment.values()):
+            continue
+            
         current_total_time = 0
-        # drone_assign 是一个元组，如 ('FY1', 'FY3', 'FY5')
-        # 默认分配给 ('M1', 'M2', 'M3')
-        assignment_map = dict(zip(drone_assign, missile_ids))
-        
-        for d_id, m_id in assignment_map.items():
-            # 从预计算结果中查找该组合的得分
-            res = next((r for r in all_pairs_results if r['drone_id'] == d_id and r['missile_id'] == m_id), None)
-            if res:
-                current_total_time += res['max_time']
-        
+        for m_id, assigned_drones in current_assignment.items():
+            intervals_for_missile = [all_pairs_results[(d_id, m_id)]['intervals'] for d_id in assigned_drones]
+            union_time, _ = calculate_union_of_intervals(intervals_for_missile)
+            current_total_time += union_time
+            
         if current_total_time > max_total_time:
             max_total_time = current_total_time
-            best_assignment = assignment_map
-    
-    print("最优分配方案寻找完毕！")
+            best_assignment = current_assignment
 
     # --- STAGE 3: 整理并输出最终结果 ---
     print("\n" + "="*70)
@@ -325,65 +353,54 @@ if __name__ == "__main__":
         print("错误：未能找到任何有效的分配方案。")
     else:
         print(f"\n最优分配方案下的最大总遮蔽时间: {max_total_time:.4f} 秒\n")
-        print("具体分配如下:")
-        for d, m in best_assignment.items():
-            print(f"  - 无人机 {d}  ->  导弹 {m}")
-        
-        print("\n" + "-"*70)
-        print("各任务单元详细策略信息:")
-        print("-"*70)
-
         final_output_data = []
 
-        for drone_id, missile_id in best_assignment.items():
-            # 提取该最优分配的详细结果
-            result = next((r for r in all_pairs_results if r['drone_id'] == drone_id and r['missile_id'] == missile_id), None)
-            if not result or result['params'] is None:
-                continue
+        for missile_id, assigned_drones in best_assignment.items():
+            if not assigned_drones: continue
 
-            # 解包参数
-            P_D0 = DRONES_INFO[drone_id]['P0']
-            params = result['params']
-            theta_opt, v_uav_opt, t_drop1_opt, delta_t1_opt, delta_t2_opt, t_fuze1_opt, t_fuze2_opt, t_fuze3_opt = params
-            v_uav_vec_opt = np.array([v_uav_opt * np.cos(theta_opt), v_uav_opt * np.sin(theta_opt), 0])
+            # 计算该导弹最终的有效遮蔽总时长和时间段
+            intervals_for_missile = [all_pairs_results[(d_id, missile_id)]['intervals'] for d_id in assigned_drones]
+            total_missile_time, merged_intervals = calculate_union_of_intervals(intervals_for_missile)
+            intervals_str = ', '.join([f"[{start:.2f}s, {end:.2f}s]" for start, end in merged_intervals])
             
-            t_drops_opt = [t_drop1_opt, t_drop1_opt + delta_t1_opt, t_drop1_opt + delta_t1_opt + delta_t2_opt]
-            fuze_times_opt = [t_fuze1_opt, t_fuze2_opt, t_fuze3_opt]
-            
-            # 格式化时间段输出
-            intervals_str = ', '.join([f"[{start:.2f}s, {end:.2f}s]" for start, end in result['intervals']])
+            for drone_id in assigned_drones:
+                result = all_pairs_results[(drone_id, missile_id)]
+                if not result or result['params'] is None: continue
 
-            for i in range(3):
-                t_drop_opt = t_drops_opt[i]
-                t_fuze_opt = fuze_times_opt[i]
-
-                p_drop_opt = P_D0 + v_uav_vec_opt * t_drop_opt
-                p_det_opt = p_drop_opt + v_uav_vec_opt * t_fuze_opt + 0.5 * G * t_fuze_opt**2
+                P_D0 = DRONES_INFO[drone_id]['P0']
+                params = result['params']
+                theta, v, t1, dt1, dt2, f1, f2, f3 = params
+                v_vec = np.array([v * np.cos(theta), v * np.sin(theta), 0])
+                t_drops = [t1, t1 + dt1, t1 + dt1 + dt2]
+                f_times = [f1, f2, f3]
                 
-                final_output_data.append({
-                    '无人机编号': drone_id,
-                    '无人机运动方向(度)': np.rad2deg(theta_opt),
-                    '无人机运动速度(m/s)': v_uav_opt,
-                    '烟幕干扰弹编号': f'弹_{i+1}',
-                    '投放点X(m)': p_drop_opt[0],
-                    '投放点Y(m)': p_drop_opt[1],
-                    '投放点Z(m)': p_drop_opt[2],
-                    '起爆点X(m)': p_det_opt[0],
-                    '起爆点Y(m)': p_det_opt[1],
-                    '起爆点Z(m)': p_det_opt[2],
-                    '对该导弹有效干扰时长(s)': result['max_time'],
-                    '有效干扰时间段': intervals_str,
-                    '干扰的导弹编号': missile_id
-                })
+                for i in range(3):
+                    p_drop = P_D0 + v_vec * t_drops[i]
+                    p_det = p_drop + v_vec * f_times[i] + 0.5 * G * f_times[i]**2
+                    
+                    final_output_data.append({
+                        '干扰的导弹编号': missile_id,
+                        '无人机编号': drone_id,
+                        '无人机运动方向(度)': np.rad2deg(theta),
+                        '无人机运动速度(m/s)': v,
+                        '烟幕干扰弹编号': f'弹_{i+1}',
+                        '投放点X(m)': p_drop[0], '投放点Y(m)': p_drop[1], '投放点Z(m)': p_drop[2],
+                        '起爆点X(m)': p_det[0], '起爆点Y(m)': p_det[1], '起爆点Z(m)': p_det[2],
+                        '该导弹总有效时长(s)': total_missile_time,
+                        '该导弹有效干扰时间段': intervals_str,
+                    })
 
-        # 创建DataFrame并进行格式化输出
         df_final = pd.DataFrame(final_output_data)
         
-        # 为了输出美观，将只在第一枚弹处显示重复信息
-        cols_to_clear = ['无人机运动方向(度)', '无人机运动速度(m/s)', '对该导弹有效干扰时长(s)', '有效干扰时间段', '干扰的导弹编号']
-        df_final.loc[df_final['烟幕干扰弹编号'] != '弹_1', cols_to_clear] = ""
+        # 为了输出美观，对每个导弹，只在第一行显示重复信息
+        cols_to_clear_missile = ['该导弹总有效时长(s)', '该导弹有效干扰时间段']
+        df_final.loc[df_final.duplicated(subset=['干扰的导弹编号']), cols_to_clear_missile] = np.nan
+
+        # 对每个无人机，只在第一枚弹处显示重复信息
+        cols_to_clear_drone = ['无人机运动方向(度)', '无人机运动速度(m/s)']
+        df_final.loc[df_final.duplicated(subset=['干扰的导弹编号', '无人机编号']), cols_to_clear_drone] = np.nan
         
-        print(df_final.to_string(index=False, float_format="%.2f"))
+        print(df_final.to_string(index=False, float_format="%.2f", na_rep=""))
 
     end_time_total = time.time()
     print("\n" + "="*70)

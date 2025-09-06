@@ -232,7 +232,7 @@ def optimize_single_drone(drone_name, P_D0):
         bounds, 
         args=(P_D0,),  # Pass P_D0 as an extra argument to the objective function
         strategy='best1bin', 
-        maxiter=50, popsize=500,
+        maxiter=100, popsize=1000,
         tol=0.01, mutation=(0.5, 1), recombination=0.8, 
         disp=True, workers=-1
     )
